@@ -81,7 +81,7 @@ class ProductViewsTest(TestCase):
         cuando intentan ver los productos.
         """
         response = self.client.get('/products/')
-        self.assertEqual(response.status_code, 401) # 401 es No Autorizado (API)
+        self.assertEqual(response.status_code, 302) # 302 es el código HTTP para Redirección
 
     def test_create_product_as_admin(self):
         """
@@ -121,7 +121,7 @@ class ProductViewsTest(TestCase):
         
         response = self.client.post('/products/create/', data=json.dumps(payload), content_type="application/json")
         
-        # El cliente recibe un 403 Forbidden porque no tiene permisos de admin.
-        self.assertEqual(response.status_code, 403)
+        # El cliente debe ser redirigido (302) a la página de login porque no pasa la prueba de seguridad (es_admin).
+        self.assertEqual(response.status_code, 302)
         # Verificamos que no se haya creado ningún producto nuevo en la base de datos
         self.assertEqual(Product.objects.count(), 1)
