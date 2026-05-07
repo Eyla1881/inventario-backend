@@ -1,0 +1,171 @@
+# =============================================================================
+# WORKFLOW DE GITHUB ACTIONS - PRUEBAS UNITARIAS EN PULL REQUESTS
+# =============================================================================
+#
+# ¿QUÉ ES UN WORKFLOW?
+# Un workflow es un proceso automatizado que GitHub ejecuta por ti.
+# Se define en un archivo YAML dentro de .github/workflows/.
+# Cada vez que ocurre un evento (como abrir un PR), GitHub lo ejecuta
+# en un servidor virtual (runner) sin que tú hagas nada.
+#
+# ¿POR QUÉ HACERLO?
+# - Detectar bugs ANTES de fusionar código al branch principal.
+# - Garantizar que los tests pasan en un entorno limpio y reproducible.
+# - Evitar que código roto llegue a producción.
+# =============================================================================
+
+# --------------------------------------------------------------------------
+# PASO 1: NOMBRE DEL WORKFLOW
+# --------------------------------------------------------------------------
+# Este nombre aparece en la pestaña "Actions" de tu repositorio en GitHub.
+# Puedes ponerle el nombre que quieras, es solo una etiqueta descriptiva.
+
+name: "Django Unit Tests"
+
+# --------------------------------------------------------------------------
+# PASO 2: EVENTOS QUE DISPARAN EL WORKFLOW (¿Cuándo se ejecuta?)
+# --------------------------------------------------------------------------
+# "on" define los eventos de GitHub que activan este workflow.
+# En nuestro caso: cada vez que se ABRA o se ACTUALICE un Pull Request
+# dirigido al branch "main".
+#
+# Tipos de eventos disponibles:
+#   - pull_request: cuando se abre, sincroniza o reabre un PR
+#   - push: cuando se hace push a un branch
+#   - schedule: ejecución programada (cron)
+#   - workflow_dispatch: ejecución manual desde la UI de GitHub
+
+on:
+  pull_request:
+    # Solo se ejecuta cuando el PR apunta a estos branches
+    branches: [ "main", "develop" ]
+
+    # Tipos de actividad que disparan el workflow:
+    #   - opened: cuando se crea el PR por primera vez
+    #   - synchronize: cuando se empujan nuevos commits al PR
+    #   - reopened: cuando se reabre un PR que fue cerrado
+    types: [opened, synchronize, labeled]
+
+permissions:
+  id-token: write
+  contents: read
+
+# --------------------------------------------------------------------------
+# PASO 3: DEFINIR LOS JOBS (¿Qué trabajos se ejecutan?)
+# --------------------------------------------------------------------------
+# Un workflow puede tener múltiples jobs. Cada job es un conjunto de pasos
+# que se ejecutan en un servidor virtual (runner) independiente.
+# Los jobs se ejecutan en PARALELO por defecto (si no dependen entre sí).
+jobs:
+
+  # Nombre del job (puedes elegir cualquier nombre)
+
+  test:
+    # -----------------------------------------------------------------------
+    # PASO 4: ELEGIR EL SISTEMA OPERATIVO DEL RUNNER
+    # -----------------------------------------------------------------------
+    # "runs-on" define en qué tipo de máquina virtual se ejecuta el job.
+    # Opciones comunes:
+    #   - ubuntu-latest: Linux (la más usada, gratis en repos públicos)
+    #   - windows-latest: Windows
+    #   - macos-latest: macOS
+
+    runs-on: ubuntu-latest
+    # Nombre descriptivo que aparece en la UI de GitHub Actions
+    name: "Run Django Tests"
+
+    # -----------------------------------------------------------------------
+    # PASO 5: DEFINIR LOS PASOS DEL JOB (steps)
+    # -----------------------------------------------------------------------
+    # Los steps se ejecutan SECUENCIALMENTE (uno tras otro) dentro del job.
+    # Cada step puede ser:
+    #   - "uses": usa una acción pre-construida del marketplace de GitHub
+    #   - "run": ejecuta un comando de shell directamente
+
+    steps:
+ 
+      # .....................................................................
+      # STEP 1: CHECKOUT - Descargar el código del repositorio
+      # .....................................................................
+      # Esta acción clona tu repositorio en el runner (servidor virtual).
+      # Sin este paso, el runner NO tiene acceso a tu código.
+      # "actions/checkout@v4" es una acción oficial mantenida por GitHub.
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+      # .....................................................................
+      # STEP 2: CONFIGURAR PYTHON
+      # .....................................................................
+      # Instala y configura la versión de Python que necesitamos.
+      # "actions/setup-python@v5" es una acción oficial de GitHub.
+      # Esto es necesario porque el runner viene con una versión por defecto
+      # que puede no ser la que tu proyecto necesita.
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+      # .....................................................................
+      # STEP 3: INSTALAR DEPENDENCIAS
+      # .....................................................................
+      # Instalamos las dependencias del proyecto desde requirements.txt.
+      # "pip install -r requirements.txt" lee el archivo y descarga
+      # todos los paquetes listados (en nuestro caso, Django).
+      #
+      # También actualizamos pip a la última versión para evitar warnings.
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+      # .....................................................................
+      # STEP 4: VERIFICAR LA CONFIGURACIÓN DE DJANGO
+      # .....................................................................
+      # "python manage.py check" valida que la configuración de Django
+      # es correcta: settings, apps registradas, modelos, etc.
+      # Si hay algún error de configuración, el workflow FALLA aquí
+      # antes de perder tiempo ejecutando los tests.
+    - name: "Verify Django configuration"
+      run: python manage.py check
+
+      # .....................................................................
+      # STEP 5: EJECUTAR LAS MIGRACIONES
+      # .....................................................................
+      # Las migraciones crean las tablas en la base de datos.
+      # Aunque usamos SQLite (archivo local), las tablas de Django
+      # (usuarios, sesiones, permisos) DEBEN existir para que los tests
+      # puedan crear usuarios de prueba.
+      #
+      # En el runner se usa una BD SQLite temporal que se destruye
+      # al terminar el workflow (no afecta tu BD real).
+    - name: Run migrations
+      run: |
+        python manage.py migrate
+      # .....................................................................
+      # STEP 6: EJECUTAR LAS PRUEBAS UNITARIAS Y MEDIR COBERTURA (COVERAGE)
+      # .....................................................................
+      # En lugar de usar simplemente "python manage.py test", usamos la
+      # herramienta "coverage".
+      # 
+      # ¿QUÉ ES EL COVERAGE (COBERTURA)?
+      # Es una herramienta que actúa como un inspector. Ejecuta nuestras 
+      # pruebas y al mismo tiempo revisa línea por línea nuestro código para 
+      # calcular qué porcentaje de nuestra aplicación realmente fue probado.
+      # 
+      # Si una línea de código nunca fue ejecutada por los tests (por ejemplo, 
+      # un bloque "else" que olvidaste probar), el coverage te lo dirá.
+      #
+      # Pasos que ejecutamos aquí:
+      # 1. coverage run... -> Corre las pruebas midiendo qué líneas se ejecutan.
+      #    --verbosity=2: muestra el nombre de cada test individual en los logs
+      #    (0 = sin output, 1 = resumen, 2 = detallado)
+      # 2. coverage report -m -> Muestra una tabla en los logs del servidor
+      #    indicando el % de cobertura por archivo y qué líneas faltan probar.
+      #
+      # Si ALGÚN test falla, este step retorna un error y el workflow se marca 
+      # como FALLIDO ❌, impidiendo que código roto se integre.
+    - name: Run tests with Coverage
+      run: |
+        coverage run manage.py test users products --verbosity=2
+        coverage report -m
