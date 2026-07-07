@@ -77,11 +77,11 @@ class ProductViewsTest(TestCase):
 
     def test_product_list_unauthenticated(self):
         """
-        Prueba que los usuarios NO autenticados sean redirigidos a la página de inicio de sesión
-        cuando intentan ver los productos.
+        Prueba que los usuarios NO autenticados reciban un error 401 Unauthorized
+        cuando intentan ver los productos (la vista es una API REST, no una vista web).
         """
         response = self.client.get('/products/')
-        self.assertEqual(response.status_code, 302) # 302 es el código HTTP para Redirección
+        self.assertEqual(response.status_code, 401) # 401 Unauthorized para APIs REST
 
     def test_create_product_as_admin(self):
         """
@@ -107,8 +107,7 @@ class ProductViewsTest(TestCase):
     def test_create_product_as_client_forbidden(self):
         """
         CAMINO TRISTE (Sad Path / Seguridad): Prueba que un cliente normal NO pueda crear un producto.
-        Debería recibir una redirección 302 al login o un 403 Forbidden.
-        (El decorador @user_passes_test de Django redirige al login por defecto si falla la validación).
+        Debería recibir un 403 Forbidden (la vista es una API REST que retorna JSON, no una vista web).
         """
         # Iniciamos sesión como cliente
         self.client.login(username='client', password='password123')
@@ -121,7 +120,7 @@ class ProductViewsTest(TestCase):
         
         response = self.client.post('/products/create/', data=json.dumps(payload), content_type="application/json")
         
-        # El cliente debe ser redirigido (302) a la página de login porque no pasa la prueba de seguridad (es_admin).
-        self.assertEqual(response.status_code, 302)
+        # El cliente debe recibir 403 Forbidden porque la API no redirige, responde con JSON.
+        self.assertEqual(response.status_code, 403)
         # Verificamos que no se haya creado ningún producto nuevo en la base de datos
         self.assertEqual(Product.objects.count(), 1)

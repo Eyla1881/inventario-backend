@@ -21,6 +21,8 @@ from django.views.generic import RedirectView
 from django.conf import settings
 from django.conf.urls.static import static
 
+# Importar la instancia de Ninja API
+from .api import api
 
 urlpatterns = [
     path('', RedirectView.as_view(url='/admin/', permanent=False)),
@@ -33,6 +35,9 @@ urlpatterns = [
     path('api/login/', api_login),
     path('api/logout/', api_logout),
     path('api/csrf/', get_csrf_token),
+    
+    # Documentación interactiva Swagger (estilo FastAPI) en /docs/
+    path('docs/', api.urls),
 ]
 
 # Servir archivos media en desarrollo
