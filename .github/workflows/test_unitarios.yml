@@ -38,7 +38,11 @@ name: "Django Unit Tests"
 on:
   pull_request:
     # Solo se ejecuta cuando el PR apunta a estos branches
+
     branches: [ "main", "develop" ]
+#test
+
+
 
     # Tipos de actividad que disparan el workflow:
     #   - opened: cuando se crea el PR por primera vez
